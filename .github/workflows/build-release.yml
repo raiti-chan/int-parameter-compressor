@@ -1,0 +1,112 @@
+﻿name: Build Release
+
+on:
+  workflow_dispatch: 
+  
+env:
+  package_name: "net.raitichan.int-parameter-compressor"
+  
+permissions:
+  contents: write
+  
+jobs: 
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          
+      - name: Generate github token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ github.repository_owner}}
+          
+      - name: Get Version
+        id: version
+        uses: notiz-dev/github-action-json-property@release
+        with:
+          path: "Packages/${{ env.package_name }}/package.json"
+          prop_path: "version"
+
+      - name: Set Environment Variables
+        run: |
+          echo "zip_file=${{ env.package_name }}-${{ steps.version.outputs.prop }}.zip" >> $GITHUB_ENV
+          echo "unity_package=${{ env.package_name }}-${{ steps.version.outputs.prop }}.unitypackage" >> $GITHUB_ENV
+          echo "json_file=${{ env.package_name }}-${{ steps.version.outputs.prop }}.json" >> $GITHUB_ENV
+          
+      - name: Update package.json
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const fs = require('fs')
+              const jsonPath = 'Packages/${{ env.package_name }}/package.json'
+              const json = fs.readFileSync(jsonPath)
+              const package = JSON.parse(json)
+              package.url = "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.prop }}/${{ env.zip_file }}"
+              const outJson = JSON.stringify(package, null, 2)
+              core.info(outJson)
+              fs.writeFileSync(jsonPath, outJson)
+            } catch(err) {
+              core.setFailed(err)
+            }
+          
+          
+      - name: Create Zip
+        run: |
+          cd "Packages/${{ env.package_name }}"
+          zip ../../${{ env.zip_file }} ./* -r
+      
+      - name: Get Meta List
+        run: find "Packages/${{ env.package_name }}/" -name \*.meta >> metaList
+        
+      - name: Create UnityPackage
+        uses: pCYSl5EDgo/create-unitypackage@cfcd3cf0391a5ef1306342794866a9897c32af0b
+        with:
+          package-path: ${{ env.unity_package }}
+          include-files: metaList
+          
+      - name: Make release
+        uses: softprops/action-gh-release@d99959edae48b5ffffd7b00da66dcdb0a33a52ee
+        with:
+          draft: true
+          generate_release_notes: true
+          tag_name: ${{ steps.version.outputs.prop }}
+          files: |
+            ${{ env.zip_file }}
+            ${{ env.unity_package }}
+            Packages/${{ env.package_name }}/package.json
+            
+      - name: Copy package.json
+        run: cp "Packages/${{ env.package_name }}/package.json" "${{ env.json_file }}"
+        
+      - name: Commit package.json
+        uses: dmnemec/copy_file_to_another_repo_action@v1.1.1
+        env:
+          API_TOKEN_GITHUB: ${{ steps.generate_token.outputs.token }}
+        with:
+          source_file: ${{ env.json_file }}
+          destination_repo: "raiti-chan/vpm-repo"
+          destination_folder: "packages/${{ env.package_name }}"
+          destination_branch: "main"
+          destination_branch_create: "release/${{ env.package_name }}-${{ steps.version.outputs.prop }}"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          user_name: "github-actions[bot]"
+          commit_message: "Release ${{ env.package_name }} ${{ steps.version.outputs.prop }}"
+          
+      - name: Create Pull Request
+        run: |
+          gh pr create\
+            --title "Release ${{ env.package_name }} ${{ steps.version.outputs.prop }}" \
+            --body "Release ${{ env.package_name }} ${{ steps.version.outputs.prop }}" \
+            --repo "raiti-chan/vpm-repo" \
+            --base main \
+            --head release/${{ env.package_name }}-${{ steps.version.outputs.prop }}
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}

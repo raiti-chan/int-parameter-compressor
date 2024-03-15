@@ -1,12 +1,16 @@
 {
     "name": "net.raitichan.int-parameter-compressor.runtime",
     "rootNamespace": "",
-    "references": [],
+    "references": [
+        "GUID:3456780c4fb2d324ab9c633d6f1b0ddb"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": true,
-    "precompiledReferences": [],
+    "precompiledReferences": [
+        "VRCSDKBase.dll"
+    ],
     "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": [],

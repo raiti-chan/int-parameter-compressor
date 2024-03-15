@@ -8,6 +8,7 @@ using UnityEngine;
 using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
 using VRC.SDKBase;
+using Object = UnityEngine.Object;
 
 #nullable enable
 
@@ -15,17 +16,41 @@ namespace net.raitichan.int_parameter_compressor {
 	internal class IntParameterCompressingPass : Pass<IntParameterCompressingPass> {
 		private Dictionary<string, int>? _maxValueDict;
 
+		private IntParameterCompressor.WriteDefault _useWriteDefault;
+		private bool _writeDefault;
+		private bool _isAllWriteDefault = true;
+
 		protected override void Execute(BuildContext context) {
+
+			IntParameterCompressor[]? intParameterCompressors = context.AvatarRootObject.GetComponentsInChildren<IntParameterCompressor>();
+			if (intParameterCompressors == null) return;
+			if (intParameterCompressors.Length <= 0) return;
+
+			{
+				IntParameterCompressor intParameterCompressor = intParameterCompressors[0];
+				this._useWriteDefault = intParameterCompressor.UseWriteDefault;
+			}
+			
+			foreach (IntParameterCompressor intParameterCompressor in intParameterCompressors) {
+				Object.DestroyImmediate(intParameterCompressor);
+			}
+			
+			
 			if (context.AvatarDescriptor.expressionParameters == null) return;
 			this.FindTargetParameter(context.AvatarDescriptor);
 
 			if (this._maxValueDict == null) return;
 			if (this._maxValueDict.Count <= 0) return;
 
+			this._writeDefault = this._useWriteDefault switch {
+				IntParameterCompressor.WriteDefault.Auto => this._isAllWriteDefault,
+				IntParameterCompressor.WriteDefault.Off => false,
+				IntParameterCompressor.WriteDefault.On => true,
+				_ => throw new ArgumentOutOfRangeException()
+			};
+
 			List<VRCExpressionParameters.Parameter> appendVRCParameters = new();
 			List<AnimatorControllerParameter> appendParameters = new();
-			List<BlendTree> appendBlendTrees = new();
-
 
 			foreach ((string targetParameter, int value) in this._maxValueDict) {
 				int useBitSize = value switch {
@@ -59,65 +84,10 @@ namespace net.raitichan.int_parameter_compressor {
 
 					appendParameters.Add(new AnimatorControllerParameter {
 						name = paramName,
-						type = AnimatorControllerParameterType.Float
+						type = AnimatorControllerParameterType.Bool
 					});
 				}
-
-				appendParameters.Add(new AnimatorControllerParameter {
-					name = $"{targetParameter}.float",
-					type = AnimatorControllerParameterType.Float
-				});
-
-				// Generate Assets
-				ChildMotion[] childMotions = new ChildMotion [useBitSize];
-				for (int i = 0; i < useBitSize; i++) {
-					ChildMotion c = childMotions[i];
-					c.directBlendParameter = $"{targetParameter}.bit_{i}";
-
-					AnimationClip decodeClip = new() {
-						name = c.directBlendParameter
-					};
-
-					AnimationCurve curve = new();
-					curve.AddKey(0, 1 << i);
-					decodeClip.SetCurve("", typeof(Animator), $"{targetParameter}.float", curve);
-
-					AssetDatabase.AddObjectToAsset(decodeClip, context.AssetContainer);
-					c.motion = decodeClip;
-					childMotions[i] = c;
-				}
-
-				BlendTree blendTree = new() {
-					blendType = BlendTreeType.Direct,
-					name = $"{targetParameter}_decoder",
-					children = childMotions
-				};
-
-				AssetDatabase.AddObjectToAsset(blendTree, context.AssetContainer);
-				appendBlendTrees.Add(blendTree);
 			}
-
-			appendParameters.Add(new AnimatorControllerParameter {
-				name = "__int-parameter-compressor_dummy_parameter",
-				type = AnimatorControllerParameterType.Float,
-				defaultFloat = 1.0f
-			});
-
-
-			// Add BlendTree
-			ChildMotion[] decodeMotions = appendBlendTrees
-				.Select(tree => new ChildMotion {
-					motion = tree,
-					directBlendParameter = "__int-parameter-compressor_dummy_parameter"
-				})
-				.ToArray();
-			BlendTree decodeBlendTree = new() {
-				blendType = BlendTreeType.Direct,
-				name = "IntParameterDecoder",
-				children = decodeMotions
-			};
-
-			AssetDatabase.AddObjectToAsset(decodeBlendTree, context.AssetContainer);
 
 			// Add parameter
 			context.AvatarDescriptor.expressionParameters.parameters = context.AvatarDescriptor.expressionParameters.parameters.Concat(appendVRCParameters).ToArray();
@@ -140,119 +110,12 @@ namespace net.raitichan.int_parameter_compressor {
 				}
 
 				{
-					// Add decode layer
-					AnimatorStateMachine decodeStateMachine = new() {
-						name = "IntParameterDecoder",
-						entryPosition = Vector3.zero,
-						exitPosition = Vector3.down * 60,
-						anyStatePosition = Vector3.up * 60
-					};
-
-					AnimatorState decodeState = new() {
-						name = decodeStateMachine.name,
-						motion = decodeBlendTree,
-						writeDefaultValues = true,
-					};
-					AssetDatabase.AddObjectToAsset(decodeState, context.AssetContainer);
-
-					decodeStateMachine.AddState(decodeState, Vector3.right * 230);
-					decodeStateMachine.defaultState = decodeState;
-					AssetDatabase.AddObjectToAsset(decodeStateMachine, context.AssetContainer);
-
-					AnimatorControllerLayer decodeLayer = new() {
-						name = decodeStateMachine.name,
-						stateMachine = decodeStateMachine,
-						defaultWeight = 1.0f
-					};
-
-					controller.AddLayer(decodeLayer);
-				}
-
-				{
-					// Add ParameterValue provide layer
-					AnimatorStateMachine provideStateMachine = new() {
-						name = "IntValueProvider",
-						entryPosition = Vector3.zero,
-						exitPosition = Vector3.down * 60,
-						anyStatePosition = Vector3.up * 60
-					};
-
-					AnimationClip waitClip = new() { name = "wait" };
-					AnimationCurve curve = new();
-					curve.AddKey(0f, 0);
-					curve.AddKey(0.2f, 0);
-					waitClip.SetCurve("dummy", typeof(GameObject), "dummy", curve);
-					AssetDatabase.AddObjectToAsset(waitClip, context.AssetContainer);
-
-					AnimatorState entryState = new() { name = "entry", writeDefaultValues = false };
-					AssetDatabase.AddObjectToAsset(entryState, context.AssetContainer);
-					AnimatorState remoteState_0 = new() { name = "remote_0", motion = waitClip, writeDefaultValues = false };
-					AssetDatabase.AddObjectToAsset(remoteState_0, context.AssetContainer);
-					AnimatorState remoteState_1 = new() { name = "remote_1", motion = waitClip, writeDefaultValues = false };
-					AssetDatabase.AddObjectToAsset(remoteState_1, context.AssetContainer);
-					AnimatorState localState = new() { name = "local", motion = waitClip, writeDefaultValues = false };
-					AssetDatabase.AddObjectToAsset(localState, context.AssetContainer);
-
-					provideStateMachine.AddState(entryState, Vector3.right * 230);
-					provideStateMachine.AddState(remoteState_0, new Vector3(230, -60));
-					provideStateMachine.AddState(remoteState_1, new Vector3(230, -120));
-					provideStateMachine.AddState(localState, new Vector3(230, 60));
-
-					provideStateMachine.defaultState = entryState;
-
-					AnimatorStateTransition entryToRemote_0 = entryState.AddTransition(remoteState_0);
-					entryToRemote_0.AddCondition(AnimatorConditionMode.IfNot, 1, "IsLocal");
-					entryToRemote_0.duration = 0;
-
-					AnimatorStateTransition entryToLocal = entryState.AddTransition(localState);
-					entryToLocal.AddCondition(AnimatorConditionMode.If, 1, "IsLocal");
-					entryToLocal.duration = 0;
-
-					AnimatorStateTransition remote_0ToRemote_1 = remoteState_0.AddTransition(remoteState_1);
-					remote_0ToRemote_1.hasExitTime = true;
-					remote_0ToRemote_1.exitTime = 1;
-					remote_0ToRemote_1.duration = 0;
-
-					AnimatorStateTransition remote_1ToRemote_0 = remoteState_1.AddTransition(remoteState_0);
-					remote_1ToRemote_0.hasExitTime = true;
-					remote_1ToRemote_0.exitTime = 1;
-					remote_1ToRemote_0.duration = 0;
-
-					VRCAvatarParameterDriver remoteState_0Driver = remoteState_0.AddStateMachineBehaviour<VRCAvatarParameterDriver>();
-					VRCAvatarParameterDriver remoteState_1Driver = remoteState_1.AddStateMachineBehaviour<VRCAvatarParameterDriver>();
-
-					foreach (string key in this._maxValueDict.Keys) {
-						remoteState_0Driver.parameters.Add(new VRC_AvatarParameterDriver.Parameter {
-							type = VRC_AvatarParameterDriver.ChangeType.Copy,
-							source = $"{key}.float",
-							name = $"{key}"
-						});
-
-						remoteState_1Driver.parameters.Add(new VRC_AvatarParameterDriver.Parameter {
-							type = VRC_AvatarParameterDriver.ChangeType.Copy,
-							source = $"{key}.float",
-							name = $"{key}"
-						});
-					}
-
-					AssetDatabase.AddObjectToAsset(provideStateMachine, context.AssetContainer);
-
-					AnimatorControllerLayer provideLayer = new() {
-						name = provideStateMachine.name,
-						stateMachine = provideStateMachine,
-						defaultWeight = 0
-					};
-
-					controller.AddLayer(provideLayer);
-				}
-
-				{
-					// Add Encode Layer
+					// Add Encode & Decode Layer
 					foreach ((string parameterName, int maxValue) in this._maxValueDict) {
 						if (controller.parameters.All(parameter => parameter.name != parameterName)) {
 							controller.AddParameter(parameterName, AnimatorControllerParameterType.Int);
 						}
-						
+
 						int useBitSize = maxValue switch {
 							< 2 => 1,
 							< 4 => 2,
@@ -263,25 +126,25 @@ namespace net.raitichan.int_parameter_compressor {
 							_ => 7
 						};
 
-						AnimatorStateMachine encodeStateMachine = new() {
-							name = $"{parameterName}_encode",
+						AnimatorStateMachine edStateMachine = new() {
+							name = $"{parameterName}_encode_decode",
 							entryPosition = Vector3.zero,
 							exitPosition = Vector3.down * 60,
 							anyStatePosition = Vector3.up * 60
 						};
 
-						AnimatorState entryState = new() { name = "entry", writeDefaultValues = false };
+						AnimatorState entryState = new() { name = "entry", writeDefaultValues = this._writeDefault };
 						AssetDatabase.AddObjectToAsset(entryState, context.AssetContainer);
-						AnimatorState remoteState = new() { name = "remote", writeDefaultValues = false };
+						AnimatorState remoteState = new() { name = "remote", writeDefaultValues = this._writeDefault };
 						AssetDatabase.AddObjectToAsset(remoteState, context.AssetContainer);
-						AnimatorState localState = new() { name = "local", writeDefaultValues = false };
+						AnimatorState localState = new() { name = "local", writeDefaultValues = this._writeDefault };
 						AssetDatabase.AddObjectToAsset(localState, context.AssetContainer);
 
-						encodeStateMachine.AddState(entryState, Vector3.right * 230);
-						encodeStateMachine.AddState(remoteState, new Vector3(230, -60));
-						encodeStateMachine.AddState(localState, new Vector3(230, 60));
+						edStateMachine.AddState(entryState, Vector3.right * 230);
+						edStateMachine.AddState(remoteState, new Vector3(230, -60));
+						edStateMachine.AddState(localState, new Vector3(230, 60));
 
-						encodeStateMachine.defaultState = entryState;
+						edStateMachine.defaultState = entryState;
 
 						AnimatorStateTransition entryToRemote = entryState.AddTransition(remoteState);
 						entryToRemote.AddCondition(AnimatorConditionMode.IfNot, 1, "IsLocal");
@@ -291,37 +154,158 @@ namespace net.raitichan.int_parameter_compressor {
 						entryToLocal.AddCondition(AnimatorConditionMode.If, 1, "IsLocal");
 						entryToLocal.duration = 0;
 
-						AssetDatabase.AddObjectToAsset(encodeStateMachine, context.AssetContainer);
+						AssetDatabase.AddObjectToAsset(edStateMachine, context.AssetContainer);
 
 						AnimatorControllerLayer encodeLayer = new() {
-							name = encodeStateMachine.name,
-							stateMachine = encodeStateMachine,
+							name = edStateMachine.name,
+							stateMachine = edStateMachine,
 							defaultWeight = 0
 						};
 
-						for (int i = 0; i <= maxValue; i++) {
-							AnimatorState encodeState = new() { name = $"encode_{i}", writeDefaultValues = false };
-							AssetDatabase.AddObjectToAsset(encodeState, context.AssetContainer);
-							encodeStateMachine.AddState(encodeState, new Vector3(230 * (i + 1), 180));
+						Stack<List<AnimatorState>> encodeStatesStack = new();
+						Stack<List<AnimatorState>> decodeStatesStack = new();
 
-							VRCAvatarParameterDriver driver = encodeState.AddStateMachineBehaviour<VRCAvatarParameterDriver>();
+						List<AnimatorState> encodeLeafStates = new();
+						List<AnimatorState> decodeLeafStates = new();
+
+						for (int i = 0; i <= maxValue; i++) {
+							AnimatorState encodeState = new() { name = $"encode_{i}", writeDefaultValues = this._writeDefault };
+							encodeLeafStates.Add(encodeState);
+							AssetDatabase.AddObjectToAsset(encodeState, context.AssetContainer);
+							VRCAvatarParameterDriver encodeDriver = encodeState.AddStateMachineBehaviour<VRCAvatarParameterDriver>();
 							for (int bit = 0; bit < useBitSize; bit++) {
-								driver.parameters.Add(new VRC_AvatarParameterDriver.Parameter {
+								encodeDriver.parameters.Add(new VRC_AvatarParameterDriver.Parameter {
 									type = VRC_AvatarParameterDriver.ChangeType.Set,
 									name = $"{parameterName}.bit_{bit}",
 									value = (i >> bit) & 1
 								});
 							}
 
-							AnimatorStateTransition localToEncode = localState.AddTransition(encodeState);
-							AnimatorStateTransition encodeToLocal = encodeState.AddTransition(localState);
-							
-							// TODO: High speed with tree structure
-							localToEncode.AddCondition(AnimatorConditionMode.Equals, i, parameterName);
-							localToEncode.duration = 0;
-							encodeToLocal.AddCondition(AnimatorConditionMode.NotEqual, i, parameterName);
-							encodeToLocal.duration = 0;
+							AnimatorState decodeState = new() { name = $"decode_{i}", writeDefaultValues = this._writeDefault };
+							decodeLeafStates.Add(decodeState);
+							AssetDatabase.AddObjectToAsset(decodeState, context.AssetContainer);
+							VRCAvatarParameterDriver decodeDriver = decodeState.AddStateMachineBehaviour<VRCAvatarParameterDriver>();
+							decodeDriver.parameters.Add(new VRC_AvatarParameterDriver.Parameter {
+								type = VRC_AvatarParameterDriver.ChangeType.Set,
+								name = parameterName,
+								value = i
+							});
 						}
+
+						encodeStatesStack.Push(encodeLeafStates);
+						decodeStatesStack.Push(decodeLeafStates);
+
+						int stateCunt = (maxValue + 1);
+						int layerMul = 1;
+						while (stateCunt > 4) {
+							stateCunt = (int)Math.Ceiling(stateCunt / 4.0f);
+							layerMul *= 4;
+
+							List<AnimatorState> encodeStates = new();
+							List<AnimatorState> decodeStates = new();
+							for (int i = 0; i < stateCunt; i++) {
+								AnimatorState encodeState = new() { name = $"encode-node-{i * layerMul}-{(i + 1) * layerMul - 1}", writeDefaultValues = this._writeDefault };
+								encodeStates.Add(encodeState);
+								AssetDatabase.AddObjectToAsset(encodeState, context.AssetContainer);
+
+								AnimatorState decodeState = new() { name = $"decode-node-{i * layerMul}-{(i + 1) * layerMul - 1}", writeDefaultValues = this._writeDefault };
+								decodeStates.Add(decodeState);
+								AssetDatabase.AddObjectToAsset(decodeState, context.AssetContainer);
+							}
+
+							encodeStatesStack.Push(encodeStates);
+							decodeStatesStack.Push(decodeStates);
+						}
+
+						{
+							List<AnimatorState> topEncodeStates = encodeStatesStack.Peek();
+							List<AnimatorState> topDecodeStates = decodeStatesStack.Peek();
+
+							int layerCount = decodeStatesStack.Count;
+							int mul = (int)Math.Pow(4, encodeStatesStack.Count) / 4;
+							for (int stateIndex = 0; stateIndex < topEncodeStates.Count; stateIndex++) {
+								{
+									AnimatorStateTransition transition = localState.AddTransition(topEncodeStates[stateIndex]);
+									transition.duration = 0;
+									if (mul == 1) {
+										transition.AddCondition(AnimatorConditionMode.Equals, stateIndex, parameterName);
+									} else {
+										transition.AddCondition(AnimatorConditionMode.Greater, stateIndex * mul - 1, parameterName);
+										transition.AddCondition(AnimatorConditionMode.Less, (stateIndex + 1) * mul, parameterName);
+									}
+								}
+								{
+									AnimatorStateTransition transition = remoteState.AddTransition(topDecodeStates[stateIndex]);
+									transition.duration = 0;
+									int currentBit = (layerCount - 1) * 2;
+									if ((useBitSize & 1) == 0) {
+										transition.AddCondition((stateIndex & 1) == 1 ? AnimatorConditionMode.If : AnimatorConditionMode.IfNot, 1, $"{parameterName}.bit_{currentBit}");
+										transition.AddCondition((stateIndex & 2) == 2 ? AnimatorConditionMode.If : AnimatorConditionMode.IfNot, 1, $"{parameterName}.bit_{currentBit + 1}");
+									} else {
+										transition.AddCondition((stateIndex & 1) == 1 ? AnimatorConditionMode.If : AnimatorConditionMode.IfNot, 1, $"{parameterName}.bit_{currentBit}");
+									}
+								}
+							}
+						}
+
+						int row = 2;
+						while (encodeStatesStack.Count > 0) {
+							List<AnimatorState> currentEncodeStates = encodeStatesStack.Pop();
+							List<AnimatorState> currentDecodeStates = decodeStatesStack.Pop();
+
+							int column = 1;
+							int columnIncrement = (int)Math.Pow(4, encodeStatesStack.Count);
+							for (int stateIndex = 0; stateIndex < currentEncodeStates.Count; stateIndex++) {
+								edStateMachine.AddState(currentEncodeStates[stateIndex], new Vector3(230 * column, 60 * row));
+								edStateMachine.AddState(currentDecodeStates[stateIndex], new Vector3(230 * column, -60 * row));
+								column += columnIncrement;
+							}
+
+							row++;
+
+							if (encodeStatesStack.TryPeek(out List<AnimatorState> childEncodeStates) && decodeStatesStack.TryPeek(out List<AnimatorState> childDecodeStates)) {
+								
+								int mul = columnIncrement / 4;
+								for (int stateIndex = 0; stateIndex < childEncodeStates.Count; stateIndex++) {
+									int parentStateIndex = stateIndex / 4;
+									{
+										AnimatorStateTransition transition = currentEncodeStates[parentStateIndex].AddTransition(childEncodeStates[stateIndex]);
+										transition.duration = 0;
+
+										if (mul == 1) {
+											transition.AddCondition(AnimatorConditionMode.Equals, stateIndex, parameterName);
+										} else {
+											transition.AddCondition(AnimatorConditionMode.Greater, stateIndex * mul - 1, parameterName);
+											transition.AddCondition(AnimatorConditionMode.Less, (stateIndex + 1) * mul, parameterName);
+										}
+									}
+
+									{
+										AnimatorStateTransition transition = currentDecodeStates[parentStateIndex].AddTransition(childDecodeStates[stateIndex]);
+										transition.duration = 0;
+										int currentBit = (decodeStatesStack.Count - 1) * 2;
+										transition.AddCondition((stateIndex & 1) == 1 ? AnimatorConditionMode.If : AnimatorConditionMode.IfNot, 1, $"{parameterName}.bit_{currentBit}");
+										transition.AddCondition((stateIndex & 2) == 2 ? AnimatorConditionMode.If : AnimatorConditionMode.IfNot, 1, $"{parameterName}.bit_{currentBit + 1}");
+									}
+								}
+							} else {
+								for (int stateIndex = 0; stateIndex < currentEncodeStates.Count; stateIndex++) {
+									{
+										AnimatorStateTransition transition = currentEncodeStates[stateIndex].AddTransition(localState);
+										transition.duration = 0;
+										transition.AddCondition(AnimatorConditionMode.NotEqual, stateIndex, parameterName);
+									}
+
+									for (int bitCount = 0; bitCount < useBitSize; bitCount++) {
+										AnimatorStateTransition transition = currentDecodeStates[stateIndex].AddTransition(remoteState);
+										transition.duration = 0;
+										bool flag = ((stateIndex >> bitCount) & 1) == 1;
+										transition.AddCondition(flag ? AnimatorConditionMode.IfNot : AnimatorConditionMode.If, 1, $"{parameterName}.bit_{bitCount}");
+									}
+								}
+							}
+						}
+
 
 						controller.AddLayer(encodeLayer);
 					}
@@ -429,8 +413,8 @@ namespace net.raitichan.int_parameter_compressor {
 			// Find the maximum value from transitions
 			foreach (var transition in controller.layers
 				         .Where(layer => layer.syncedLayerIndex < 0)
-				         .SelectMany(layer => GetAllTransitions(layer.stateMachine))) {
-				foreach (AnimatorCondition condition in transition.AnimatorTransition.conditions
+				         .SelectMany(layer => this.GetAllTransitions(layer.stateMachine))) {
+				foreach (AnimatorCondition condition in transition.conditions
 					         .Where(condition => this._maxValueDict.Keys.Any(name => name == condition.parameter))) {
 					int val = this._maxValueDict[condition.parameter];
 					switch (condition.mode) {
@@ -463,65 +447,33 @@ namespace net.raitichan.int_parameter_compressor {
 			// Parameters controlled by animation are not synchronized and need not be considered
 		}
 
-		private static IEnumerable<Transition> GetAllTransitions(AnimatorStateMachine stateMachine) {
+		private IEnumerable<AnimatorTransitionBase> GetAllTransitions(AnimatorStateMachine stateMachine) {
 			foreach (AnimatorTransition transition in stateMachine.entryTransitions) {
-				yield return new Transition {
-					AnimatorTransition = transition,
-					TransitionType = TransitionType.EntryTo,
-					StateMachine = stateMachine
-				};
+				yield return  transition;
 			}
 
 			foreach (AnimatorStateTransition transition in stateMachine.anyStateTransitions) {
-				yield return new Transition {
-					AnimatorTransition = transition,
-					TransitionType = TransitionType.AnyTo,
-					StateMachine = stateMachine
-				};
+				yield return transition;
 			}
 
 			foreach (ChildAnimatorState childAnimatorState in stateMachine.states) {
+				if (!childAnimatorState.state.writeDefaultValues) {
+					this._isAllWriteDefault = false;
+				}
 				foreach (AnimatorStateTransition transition in childAnimatorState.state.transitions) {
-					yield return new Transition {
-						AnimatorTransition = transition,
-						TransitionType = TransitionType.StateTo,
-						StateMachine = stateMachine,
-						SrcState = childAnimatorState.state
-					};
+					yield return transition;
 				}
 			}
 
 			foreach (ChildAnimatorStateMachine childStateMachine in stateMachine.stateMachines) {
 				foreach (AnimatorTransition transition in stateMachine.GetStateMachineTransitions(childStateMachine.stateMachine)) {
-					yield return new Transition {
-						AnimatorTransition = transition,
-						TransitionType = TransitionType.StateMachineTo,
-						StateMachine = stateMachine,
-						SrcStateMachine = childStateMachine.stateMachine
-					};
+					yield return transition;
 				}
 
-				foreach (Transition transition in GetAllTransitions(childStateMachine.stateMachine)) {
+				foreach (AnimatorTransitionBase transition in this.GetAllTransitions(childStateMachine.stateMachine)) {
 					yield return transition;
 				}
 			}
-		}
-
-		private struct Transition {
-			public AnimatorTransitionBase AnimatorTransition { get; set; }
-			public AnimatorStateMachine StateMachine { get; set; }
-
-			public TransitionType TransitionType { get; set; }
-
-			public AnimatorStateMachine? SrcStateMachine { get; set; }
-			public AnimatorState? SrcState { get; set; }
-		}
-
-		private enum TransitionType {
-			StateTo,
-			AnyTo,
-			EntryTo,
-			StateMachineTo,
 		}
 	}
 }

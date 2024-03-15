@@ -2,6 +2,11 @@
 
 on:
   workflow_dispatch: 
+  push:
+    branches:
+      - main
+    paths:
+      - Packages/net.raitichan.int-parameter-compressor/package.json
   
 env:
   package_name: "net.raitichan.int-parameter-compressor"

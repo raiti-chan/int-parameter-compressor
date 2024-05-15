@@ -103,6 +103,21 @@ namespace net.raitichan.int_parameter_compressor {
 				};
 				// Avatars with no FX layer present do not run.
 				if (controller == null) return;
+				
+				// IsLocal Parameter Check
+				bool isLocalParamIsFloat = false;
+				var isLocalParameter = controller.parameters.FirstOrDefault(parameter => parameter.name == "IsLocal");
+				if (isLocalParameter == null) {
+					controller.AddParameter("IsLocal", AnimatorControllerParameterType.Bool);
+				} else if (isLocalParameter.type == AnimatorControllerParameterType.Float) {
+					isLocalParamIsFloat = true;
+				}
+				
+				foreach (AnimatorControllerParameter parameter in controller.parameters) {
+					if (parameter.name != "IsLocal") continue;
+					if (parameter.type != AnimatorControllerParameterType.Float) continue;
+					isLocalParamIsFloat = true;
+				}
 
 				// Add Parameter to controller
 				foreach (AnimatorControllerParameter parameter in appendParameters) {
@@ -147,11 +162,20 @@ namespace net.raitichan.int_parameter_compressor {
 						edStateMachine.defaultState = entryState;
 
 						AnimatorStateTransition entryToRemote = entryState.AddTransition(remoteState);
-						entryToRemote.AddCondition(AnimatorConditionMode.IfNot, 1, "IsLocal");
+						if (isLocalParamIsFloat) {
+							entryToRemote.AddCondition(AnimatorConditionMode.Less, 0.5f, "IsLocal");
+						} else {
+							entryToRemote.AddCondition(AnimatorConditionMode.IfNot, 1, "IsLocal");
+						}
 						entryToRemote.duration = 0;
 
 						AnimatorStateTransition entryToLocal = entryState.AddTransition(localState);
-						entryToLocal.AddCondition(AnimatorConditionMode.If, 1, "IsLocal");
+						if (isLocalParamIsFloat) {
+							entryToLocal.AddCondition(AnimatorConditionMode.Greater, 0.5f, "IsLocal");
+						} else {
+							entryToLocal.AddCondition(AnimatorConditionMode.If, 1, "IsLocal");
+						}
+
 						entryToLocal.duration = 0;
 
 						AssetDatabase.AddObjectToAsset(edStateMachine, context.AssetContainer);

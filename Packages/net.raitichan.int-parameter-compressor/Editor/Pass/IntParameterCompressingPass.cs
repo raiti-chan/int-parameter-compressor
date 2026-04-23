@@ -14,7 +14,7 @@ using Object = UnityEngine.Object;
 
 #nullable enable
 
-namespace net.raitichan.int_parameter_compressor {
+namespace net.raitichan.int_parameter_compressor.Pass {
     internal class IntParameterCompressingPass : Pass<IntParameterCompressingPass> {
         private Dictionary<string, int> _maxValueDict = new();
 

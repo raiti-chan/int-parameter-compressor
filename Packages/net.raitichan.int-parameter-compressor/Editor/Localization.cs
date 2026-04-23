@@ -44,6 +44,58 @@ namespace net.raitichan.int_parameter_compressor {
             {
                 "error.unused_compressed_parameter:hint",
                 "Please remove the specification of the above parameters."
+            },
+            {
+                "ui.parameter_compression_mode.label",
+                "Parameter compression mode"
+            },
+            {
+                "ui.parameter_compression_mode.auto",
+                "Auto"
+            },
+            {
+                "ui.parameter_compression_mode.exclude",
+                "Exclude"
+            },
+            {
+                "ui.parameter_compression_mode.compress",
+                "Compress"
+            },
+            {
+                "ui.bit_count.label",
+                "Maximum value"
+            },
+            {
+                "ui.bit_count.auto",
+                "Auto"
+            },
+            {
+                "ui.bit_count.one",
+                "1bit (0~1)"
+            },
+            {
+                "ui.bit_count.two",
+                "2bit (0~3)"
+            },
+            {
+                "ui.bit_count.three",
+                "3bit (0~7)"
+            },
+            {
+                "ui.bit_count.four",
+                "4bit (0~15)"
+            },
+            {
+                "ui.bit_count.five",
+                "5bit (0~31)"
+            },
+            {
+                "ui.bit_count.six",
+                "6bit (0~63)"
+            },
+            {
+                "ui.bit_count.seven",
+                "7bit (0~127)"
             }
         };
 
@@ -79,6 +131,58 @@ namespace net.raitichan.int_parameter_compressor {
             {
                 "error.unused_compressed_parameter:hint",
                 "上記のパラメータの指定を外してください。"
+            },
+            {
+                "ui.parameter_compression_mode.label",
+                "パラメータの圧縮モード"
+            },
+            {
+                "ui.parameter_compression_mode.auto",
+                "自動"
+            },
+            {
+                "ui.parameter_compression_mode.exclude",
+                "圧縮しない"
+            },
+            {
+                "ui.parameter_compression_mode.compress",
+                "圧縮する"
+            },
+            {
+                "ui.bit_count.label",
+                "最大値"
+            },
+            {
+                "ui.bit_count.auto",
+                "自動"
+            },
+            {
+                "ui.bit_count.one",
+                "1bit (0~1)"
+            },
+            {
+                "ui.bit_count.two",
+                "2bit (0~3)"
+            },
+            {
+                "ui.bit_count.three",
+                "3bit (0~7)"
+            },
+            {
+                "ui.bit_count.four",
+                "4bit (0~15)"
+            },
+            {
+                "ui.bit_count.five",
+                "5bit (0~31)"
+            },
+            {
+                "ui.bit_count.six",
+                "6bit (0~63)"
+            },
+            {
+                "ui.bit_count.seven",
+                "7bit (0~127)"
             }
         };
     }

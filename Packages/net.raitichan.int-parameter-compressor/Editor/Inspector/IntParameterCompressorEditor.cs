@@ -5,12 +5,11 @@ namespace net.raitichan.int_parameter_compressor.Inspector {
 	public class IntParameterCompressorEditor : Editor {
 
 		public override void OnInspectorGUI() {
-			serializedObject.Update();
+			this.serializedObject.Update();
 
 			EditorGUILayout.PropertyField(serializedObject.FindProperty("_useWriteDefault"));
 
-			serializedObject.ApplyModifiedProperties();
-
+			this.serializedObject.ApplyModifiedProperties();
 		}
 	}
 }

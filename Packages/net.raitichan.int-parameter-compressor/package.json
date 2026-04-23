@@ -1,7 +1,7 @@
 {
   "name": "net.raitichan.int-parameter-compressor",
   "displayName": "Int Parameter Compressor",
-  "version": "1.0.0",
+  "version": "1.1.0-beta.1",
   "unity": "2022.3",
   "description": "Non destructively compresses synchronized parameters of type Int.",
   "author": {
@@ -13,6 +13,7 @@
   "repo": "",
   "vpmDependencies": {
     "com.vrchat.avatars": ">=3.5.0",
-    "nadena.dev.ndmf": ">=1.3.7"
+    "nadena.dev.ndmf": ">=1.11.0",
+    "nadena.dev.modular-avatar.core": ">=1.16.2"
   }
 }

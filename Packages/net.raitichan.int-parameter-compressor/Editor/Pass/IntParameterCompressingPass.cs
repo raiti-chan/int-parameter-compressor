@@ -426,6 +426,10 @@ namespace net.raitichan.int_parameter_compressor.Pass {
 
             if (this._maxValueDict.Count <= 0) return;
 
+            autoMaxParameters = autoMaxParameters
+                .Where(name => this._maxValueDict.ContainsKey(name))
+                .ToHashSet();
+
             // Find the maximum value of the parameter from the Animator Controller
             foreach (VRCAvatarDescriptor.CustomAnimLayer customAnimLayer in avatar.baseAnimationLayers) {
                 switch (customAnimLayer.animatorController) {
@@ -512,7 +516,7 @@ namespace net.raitichan.int_parameter_compressor.Pass {
                          .SelectMany(layer => this.GetAllTransitions(layer.stateMachine))) {
                 foreach (AnimatorCondition condition in transition.conditions
                              .Where(condition => targetParameters.Contains(condition.parameter))) {
-                    int val = this._maxValueDict[condition.parameter];
+                    if (!this._maxValueDict.TryGetValue(condition.parameter, out int val)) continue;
                     switch (condition.mode) {
                         case AnimatorConditionMode.If:
                         case AnimatorConditionMode.IfNot:

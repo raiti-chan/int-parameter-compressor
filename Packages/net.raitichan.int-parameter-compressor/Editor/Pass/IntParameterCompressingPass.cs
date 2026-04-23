@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.vrchat;
+using net.raitichan.int_parameter_compressor.Context;
+using net.raitichan.int_parameter_compressor.Enum;
 using net.raitichan.int_parameter_compressor.NdmfConsole;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -19,21 +21,24 @@ namespace net.raitichan.int_parameter_compressor.Pass {
         private Dictionary<string, int> _maxValueDict = new();
 
         private UnknownMaxParameterWarning? _maxParameterWarning;
-        private UnknownMaxParameterWarning  UnknownMaxParameterWarning => this._maxParameterWarning ??= new UnknownMaxParameterWarning();
+        private UnknownMaxParameterWarning UnknownMaxParameterWarning => this._maxParameterWarning ??= new UnknownMaxParameterWarning();
+
+        private CompressedParameterContext _compressedParameterContext = null!;
 
         private IntParameterCompressor.WriteDefault _useWriteDefault;
         private bool _writeDefault;
         private bool _isAllWriteDefault = true;
 
 
-        private void Initialize() {
+        private void Initialize(BuildContext context) {
             this._isAllWriteDefault = true;
             this._maxValueDict = new Dictionary<string, int>();
             this._maxParameterWarning = null;
+            this._compressedParameterContext = context.Extension<CompressedParameterContext>();
         }
 
         protected override void Execute(BuildContext context) {
-            this.Initialize();
+            this.Initialize(context);
             IntParameterCompressor[]? intParameterCompressors = context.AvatarRootObject.GetComponentsInChildren<IntParameterCompressor>();
             if (intParameterCompressors == null) return;
             if (intParameterCompressors.Length <= 0) return;
@@ -367,24 +372,52 @@ namespace net.raitichan.int_parameter_compressor.Pass {
 
         private void FindTargetParameter(VRCAvatarDescriptor avatar) {
             if (avatar.expressionParameters == null) return;
+            Dictionary<string, ResolvedCompressedParameter> contextParameters = this._compressedParameterContext.State.Parameters;
             VRCExpressionParameters parameters = avatar.expressionParameters;
             VRCExpressionsMenu? menu = avatar.expressionsMenu;
 
-            this._maxValueDict = parameters.parameters
+            IEnumerable<VRCExpressionParameters.Parameter> targetParameters = parameters.parameters
                 .Where(parameter =>
                     parameter.valueType == VRCExpressionParameters.ValueType.Int
                     && parameter.networkSynced
-                    && parameter.name.IndexOf("SyncPointer", StringComparison.OrdinalIgnoreCase) == -1
-                )
+                    && parameter.name.IndexOf("SyncPointer", StringComparison.OrdinalIgnoreCase) == -1)
+                .ToArray();
+
+            HashSet<string> targetParameterNames = targetParameters.Select(parameter => parameter.name).ToHashSet();
+
+            MissingCompressedParameterWarning? missingCompressedParameterWarning = null;
+            foreach (string parametersKey in contextParameters.Keys
+                         .Where(s => !targetParameterNames.Contains(s))) {
+                missingCompressedParameterWarning ??= new MissingCompressedParameterWarning();
+                missingCompressedParameterWarning.AddMissingParameter(parametersKey);
+            }
+
+            this._maxValueDict = targetParameters
+                .Where(parameter =>
+                    contextParameters.GetValueOrDefault(parameter.name).Mode != ParameterCompressionMode.Exclude)
                 // TODO: Detect duplicate expression parameter names and report a clear error instead of throwing from ToDictionary.
                 .ToDictionary(
                     parameter => parameter.name,
                     parameter => (int)parameter.defaultValue
                 );
 
+            if (missingCompressedParameterWarning != null) {
+                ErrorReport.ReportError(missingCompressedParameterWarning);
+            }
+
+            HashSet<string> autoMaxParameters = this._maxValueDict.Keys
+                .Where(name => contextParameters.GetValueOrDefault(name).BitCount == BitCount.Auto)
+                .ToHashSet();
+
+            foreach (KeyValuePair<string, int> keyValuePair in this._maxValueDict.Where(keyValuePair => !autoMaxParameters
+                         .Contains(keyValuePair.Key)).ToArray()) {
+                this._maxValueDict[keyValuePair.Key] =
+                    (1 << (int)contextParameters.GetValueOrDefault(keyValuePair.Key).BitCount) - 1;
+            }
+
             // Find the maximum value of the parameter from the Menu
             if (menu != null) {
-                this.FindMaxValueFromMenu(menu);
+                this.FindMaxValueFromMenu(menu, autoMaxParameters);
             }
 
             foreach (string key in this._maxValueDict.Where(pair => pair.Value > 127).Select(pair => pair.Key)) {
@@ -397,10 +430,11 @@ namespace net.raitichan.int_parameter_compressor.Pass {
             foreach (VRCAvatarDescriptor.CustomAnimLayer customAnimLayer in avatar.baseAnimationLayers) {
                 switch (customAnimLayer.animatorController) {
                     case AnimatorController controller:
-                        this.FindMaxValueFromAnimatorController(controller);
+                        this.FindMaxValueFromAnimatorController(controller, autoMaxParameters);
                         break;
                     case AnimatorOverrideController overrideController:
-                        this.FindMaxValueFromAnimatorController(overrideController.runtimeAnimatorController as AnimatorController);
+                        this.FindMaxValueFromAnimatorController(overrideController.runtimeAnimatorController as AnimatorController,
+                            autoMaxParameters);
                         break;
                 }
             }
@@ -410,7 +444,7 @@ namespace net.raitichan.int_parameter_compressor.Pass {
             }
         }
 
-        private void FindMaxValueFromMenu(VRCExpressionsMenu menu) {
+        private void FindMaxValueFromMenu(VRCExpressionsMenu menu, HashSet<string> targetParameters) {
             HashSet<VRCExpressionsMenu> alreadyVisitMenu = new();
             Queue<VRCExpressionsMenu> queue = new();
             queue.Enqueue(menu);
@@ -420,7 +454,7 @@ namespace net.raitichan.int_parameter_compressor.Pass {
                 if (!alreadyVisitMenu.Add(target)) continue;
 
                 foreach (VRCExpressionsMenu.Control control in target.controls) {
-                    if (this._maxValueDict.Keys.Any(name => name == control.parameter.name)) {
+                    if (targetParameters.Contains(control.parameter.name)) {
                         int val = this._maxValueDict[control.parameter.name];
                         val = (int)Mathf.Max(val, control.value);
                         this._maxValueDict[control.parameter.name] = val;
@@ -434,13 +468,13 @@ namespace net.raitichan.int_parameter_compressor.Pass {
             }
         }
 
-        private void FindMaxValueFromAnimatorController(AnimatorController? controller) {
+        private void FindMaxValueFromAnimatorController(AnimatorController? controller, HashSet<string> targetParameters) {
             if (controller == null) return;
             // Find the maximum value from Parameter driver
             VRCAvatarParameterDriver[] drivers = controller.GetBehaviours<VRCAvatarParameterDriver>();
             foreach (VRC_AvatarParameterDriver.Parameter parameter in drivers.SelectMany(driver => driver.parameters)
-                         .Where(parameter => this._maxValueDict.Keys.Any(name => parameter.name == name))) {
-                int val = this._maxValueDict[parameter.name];
+                         .Where(parameter => targetParameters.Contains(parameter.name))) {
+                int val = this._maxValueDict.GetValueOrDefault(parameter.name);
                 switch (parameter.type) {
                     case VRC_AvatarParameterDriver.ChangeType.Set:
                         val = (int)Mathf.Max(val, parameter.value);
@@ -473,11 +507,11 @@ namespace net.raitichan.int_parameter_compressor.Pass {
             }
 
             // Find the maximum value from transitions
-            foreach (var transition in controller.layers
+            foreach (AnimatorTransitionBase? transition in controller.layers
                          .Where(layer => layer.syncedLayerIndex < 0)
                          .SelectMany(layer => this.GetAllTransitions(layer.stateMachine))) {
                 foreach (AnimatorCondition condition in transition.conditions
-                             .Where(condition => this._maxValueDict.Keys.Any(name => name == condition.parameter))) {
+                             .Where(condition => targetParameters.Contains(condition.parameter))) {
                     int val = this._maxValueDict[condition.parameter];
                     switch (condition.mode) {
                         case AnimatorConditionMode.If:

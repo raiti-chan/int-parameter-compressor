@@ -31,7 +31,19 @@ namespace net.raitichan.int_parameter_compressor {
             },
             {
                 "error.unknown_max_parameter:hint",
-                "If compression breaks one of these parameters, add it to the exclude list."
+                "If you encounter issues when compressing these parameters, add them to the exclusion list or specify their ranges explicitly."
+            },
+            {
+                "error.unused_compressed_parameter",
+                "An asynchronous, non-integer, or undefined parameter has been defined."
+            },
+            {
+                "error.unused_compressed_parameter:description",
+                "The following parameters are ignored in the compression/exclusion settings."
+            },
+            {
+                "error.unused_compressed_parameter:hint",
+                "Please remove the specification of the above parameters."
             }
         };
 
@@ -54,7 +66,19 @@ namespace net.raitichan.int_parameter_compressor {
             },
             {
                 "error.unknown_max_parameter:hint",
-                "これらのパラメータの圧縮で問題が起きる場合は、除外リストに追加してください。"
+                "これらのパラメータの圧縮で問題が起きる場合は、除外リストに追加、または明示的に範囲を指定してください。"
+            },
+            {
+                "error.unused_compressed_parameter",
+                "非同期、非整数、または定義されていないパラメータが定義されています。"
+            },
+            {
+                "error.unused_compressed_parameter:description",
+                "以下のパラメータは圧縮/除外設定から無視されています。"
+            },
+            {
+                "error.unused_compressed_parameter:hint",
+                "上記のパラメータの指定を外してください。"
             }
         };
     }

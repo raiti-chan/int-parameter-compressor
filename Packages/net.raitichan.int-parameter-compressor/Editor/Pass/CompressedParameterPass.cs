@@ -101,7 +101,7 @@ namespace net.raitichan.int_parameter_compressor.Pass {
         private static int GetModePriority(ParameterCompressionMode mode) {
             return mode switch {
                 ParameterCompressionMode.Exclude => 3,
-                ParameterCompressionMode.ForceCompress => 2,
+                ParameterCompressionMode.Compress => 2,
                 ParameterCompressionMode.Auto => 1,
                 _ => 0
             };

@@ -342,8 +342,16 @@ namespace net.raitichan.int_parameter_compressor {
 			VRCExpressionParameters parameters = avatar.expressionParameters;
 
 			this._maxValueDict = parameters.parameters
-				.Where(parameter => parameter.valueType == VRCExpressionParameters.ValueType.Int && parameter.networkSynced)
-				.ToDictionary(parameter => parameter.name, parameter => (int)parameter.defaultValue);
+				.Where(
+					parameter =>
+					parameter.valueType == VRCExpressionParameters.ValueType.Int
+					&& parameter.networkSynced
+					&& parameter.name.IndexOf("SyncPointer", StringComparison.OrdinalIgnoreCase) == -1
+				)
+				.ToDictionary(
+					parameter => parameter.name,
+					parameter => (int)parameter.defaultValue
+				);
 
 			// Find the maximum value of the parameter from the Menu
 			this.FindMaxValueFromMenu(avatar.expressionsMenu);

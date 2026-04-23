@@ -420,7 +420,7 @@ namespace net.raitichan.int_parameter_compressor.Pass {
                 this.FindMaxValueFromMenu(menu, autoMaxParameters);
             }
 
-            foreach (string key in this._maxValueDict.Where(pair => pair.Value > 127).Select(pair => pair.Key)) {
+            foreach (string key in this._maxValueDict.Where(pair => pair.Value > 127).Select(pair => pair.Key).ToArray()) {
                 this._maxValueDict.Remove(key);
             }
 
@@ -439,7 +439,7 @@ namespace net.raitichan.int_parameter_compressor.Pass {
                 }
             }
 
-            foreach (string key in this._maxValueDict.Where(pair => pair.Value > 127).Select(pair => pair.Key)) {
+            foreach (string key in this._maxValueDict.Where(pair => pair.Value > 127).Select(pair => pair.Key).ToArray()) {
                 this._maxValueDict.Remove(key);
             }
         }

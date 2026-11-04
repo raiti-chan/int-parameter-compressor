@@ -17,7 +17,8 @@
     "overrideReferences": true,
     "precompiledReferences": [
         "VRCSDK3A.dll",
-        "VRCSDKBase.dll"
+        "VRCSDKBase.dll",
+        "net.raitichan.int_parameter_compressor.license.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [],

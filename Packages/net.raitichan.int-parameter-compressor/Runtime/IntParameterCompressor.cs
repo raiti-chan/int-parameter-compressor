@@ -7,8 +7,12 @@ namespace net.raitichan.int_parameter_compressor {
 	public class IntParameterCompressor : MonoBehaviour, IEditorOnly {
 		
 		[SerializeField]
-		private WriteDefault _useWriteDefault;
-		public WriteDefault UseWriteDefault => _useWriteDefault;
+		private WriteDefault useWriteDefault;
+		public WriteDefault UseWriteDefault => this.useWriteDefault;
+
+		[SerializeField]
+		private bool useWhitelist;
+		public bool UseWhitelist => this.useWhitelist;
 
 		public enum WriteDefault {
 			Auto,

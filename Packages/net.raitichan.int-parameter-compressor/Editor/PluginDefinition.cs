@@ -16,6 +16,7 @@ namespace net.raitichan.int_parameter_compressor {
             Sequence seq = this.InPhase(BuildPhase.Optimizing);
             seq.WithRequiredExtension(typeof(CompressedParameterContext), s => {
                 s.Run(CompressedParameterPass.Instance);
+                s.Run(NativeIntParameterCompressingPass.Instance);
                 s.Run(IntParameterCompressingPass.Instance);
             });
         }

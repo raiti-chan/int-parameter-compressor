@@ -72,3 +72,8 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 
 /[Aa]ssets/
+
+/Internal/
+
+# ライセンス認証ロジックのビルド済みプラグインdll(グローバルgitignoreの*.dllで無視されるため明示的に追跡する)
+!/Packages/net.raitichan.int-parameter-compressor/Plugin/*.dll

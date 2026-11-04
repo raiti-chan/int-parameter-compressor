@@ -5,6 +5,7 @@ using nadena.dev.ndmf;
 using nadena.dev.ndmf.vrchat;
 using net.raitichan.int_parameter_compressor.Context;
 using net.raitichan.int_parameter_compressor.Enum;
+using net.raitichan.int_parameter_compressor.license;
 using net.raitichan.int_parameter_compressor.NdmfConsole;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -38,6 +39,12 @@ namespace net.raitichan.int_parameter_compressor.Pass {
         }
 
         protected override void Execute(BuildContext context) {
+            // Native圧縮(2.0)が有効な場合はこちらのLegacyパス(Bool分解+FXレイヤー生成)は動かさない。
+            // License.Check()はNDMFの実行順制約(PluginDefinition.cs)で
+            // NativeIntParameterCompressingPassより後に走ることが保証されているので、
+            // ライセンスが有効ならNative側で既に処理済みのはず。
+            if (License.Check()) return;
+
             this.Initialize(context);
             IntParameterCompressor[]? intParameterCompressors = context.AvatarRootObject.GetComponentsInChildren<IntParameterCompressor>();
             if (intParameterCompressors == null) return;
